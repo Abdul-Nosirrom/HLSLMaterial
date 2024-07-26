@@ -7,7 +7,7 @@
 class IMaterialEditor;
 class FMessageLogListingViewModel;
 
-class FHLSLMaterialErrorHook
+class HLSLMATERIALEDITOR_API FHLSLMaterialErrorHook
 {
 public:
 	static constexpr const TCHAR* PathPrefix = TEXT("[HLSLMaterial]");

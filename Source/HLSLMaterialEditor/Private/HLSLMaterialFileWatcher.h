@@ -7,7 +7,7 @@
 #include "Containers/Ticker.h"
 #include "HLSLMaterialUtilities.h"
 
-class FHLSLMaterialFileWatcher
+class HLSLMATERIALEDITOR_API FHLSLMaterialFileWatcher
 	: public FVirtualDestructor
 	, public TSharedFromThis<FHLSLMaterialFileWatcher>
 	, public UE_500_SWITCH(FTickerObjectBase, FTSTickerObjectBase)
