@@ -23,7 +23,7 @@
 #include "Materials/MaterialExpressionWorldPosition.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/UObjectIterator.h"
-#include "Editor/MaterialEditor/Private/MaterialEditor.h"
+#include "MaterialEditor.h"
 #include "Materials/MaterialExpressionSceneTexture.h"
 
 

@@ -16,6 +16,7 @@ public:
 	UHLSLShaderLibraryFactory()
 	{
 		bCreateNew = true;
+		bEditorImport = false;
 		bEditAfterNew = true;
 		SupportedClass = UHLSLShaderLibrary::StaticClass();
 	}

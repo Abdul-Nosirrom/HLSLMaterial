@@ -6,4 +6,4 @@
 class FHLSLShaderRuntimeModule : public IModuleInterface
 {
 };
-IMPLEMENT_MODULE(FHLSLShaderRuntimeModule, HLSLMaterialRuntime);
+IMPLEMENT_MODULE(FHLSLShaderRuntimeModule, HLSLShaderRuntime);

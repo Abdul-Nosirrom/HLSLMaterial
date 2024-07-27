@@ -24,11 +24,13 @@
 #include "MaterialGraph/MaterialGraph.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionComment.h"
-#include "Editor/MaterialEditor/Private/MaterialEditor.h"
+#include "MaterialEditor.h"
 #include "Factories/MaterialFactoryNew.h"
+#include "Factories/MaterialInstanceConstantFactoryNew.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Materials/MaterialExpressionParameter.h"
 #include "Materials/MaterialInstance.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "UObject/UObjectIterator.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
@@ -529,6 +531,13 @@ void FHLSLShaderLibraryEditor::Generate(UHLSLShaderLibrary& Library)
 		FMaterialUpdateContext UpdateContext;
 		UpdateContext.AddMaterial(Library.Materials.Get());
 		UMaterialEditingLibrary::RecompileMaterial(Library.Materials.Get());
+
+		// Refresh our custom editor
+		if (IAssetEditorInstance* AssetEditorInstance = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->FindEditorForAsset(&Library, false))
+		{
+			IMaterialEditor* ShaderEditor = static_cast<IMaterialEditor*>(AssetEditorInstance);
+			if (ShaderEditor) ShaderEditor->NotifyExternalMaterialChange();
+		}
 	}
 	
 	// message
@@ -602,8 +611,40 @@ FString FHLSLShaderLibraryEditor::GenerateMaterialForShader(UHLSLShaderLibrary& 
 	return "";
 }
 
+void FHLSLShaderLibraryEditor::GenerateMaterialInstanceForShader(UHLSLShaderLibrary& Library)
+{
+	TSoftObjectPtr<UMaterial>* MaterialPtr = &Library.Materials;
+	
+	FString BasePath = FPackageName::ObjectPathToPackageName(Library.GetPathName());
+	if (Library.bPutFunctionsInSubdirectory)
+	{
+		BasePath += "_Instances";
+	}
+	else
+	{
+		BasePath = FPaths::GetPath(BasePath);
+	}
+	
+	UMaterial* MaterialParent = MaterialPtr->Get();
+	if (!MaterialParent)
+	{
+		FString Error;
+		{
+			// create an unreal material asset
+			FString FixedMaterialName = TEXT("MI_") + Library.GetName();
+			FString NewPackageName = BasePath + TEXT("/") + FixedMaterialName;
+
+			UPackage* Package = UPackageTools::FindOrCreatePackageForAssetType(FName(*NewPackageName), UMaterial::StaticClass());
+			UMaterialInstanceConstantFactoryNew* MIFactoryNew = NewObject<UMaterialInstanceConstantFactoryNew>();
+			FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+			UObject* CreatedObject = AssetTools.Get().CreateAsset(FixedMaterialName, BasePath, UMaterialInstanceConstant::StaticClass(), MIFactoryNew);
+			Package->SetDirtyFlag(true);
+		}
+	}
+}
+
 FString FHLSLShaderLibraryEditor::SetupMaterialSettings(UMaterial* Material,
-	const TArray<FHLSLShaderParser::FSetting>& Settings)
+                                                        const TArray<FHLSLShaderParser::FSetting>& Settings)
 {
 	static const TMap<FString, EMaterialDomain> DomainMap =
 	{

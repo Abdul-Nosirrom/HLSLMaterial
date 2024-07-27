@@ -34,9 +34,17 @@ public class HLSLShaderEditor : ModuleRules
                 "MaterialEditor",
                 "HLSLShaderRuntime",
                 "HLSLMaterialEditor",
-                "DeveloperSettings", "HLSLMaterialRuntime",
+                "HLSLMaterialRuntime",
+                "MaterialEditor",
+                "UnrealEd",
+                "AdvancedPreviewScene",
+                "InputCore",
+                "AssetTools",
+                "DeveloperSettings",
+                "ToolMenus"
             });
 
         PrivateIncludePaths.Add(Path.Combine(EngineDirectory, "Source/Developer/MessageLog/Private/"));
+        PrivateIncludePaths.Add(Path.Combine(EngineDirectory, "Source/Editor/MaterialEditor/Private/"));
     }
 }

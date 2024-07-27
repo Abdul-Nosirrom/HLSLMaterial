@@ -10,6 +10,8 @@ class UHLSLShaderLibrary;
 
 class FHLSLShaderLibraryEditor
 {
+	friend class FAssetTypeActions_HLSLShaderLibrary;
+	
 public:
 	static void Register();
 
@@ -18,6 +20,8 @@ public:
 
 private:
 	static FString GenerateMaterialForShader(UHLSLShaderLibrary& Library, const TArray<FHLSLShaderParser::FSetting>& MaterialSettings);
+	static void GenerateMaterialInstanceForShader(UHLSLShaderLibrary& Library);
+
 	static bool TryLoadFileToString(FString& Text, const FString& FullPath);
 
 	static UObject* CreateAsset(FString AssetName, FString FolderPath, UClass* Class, FString& OutError);
