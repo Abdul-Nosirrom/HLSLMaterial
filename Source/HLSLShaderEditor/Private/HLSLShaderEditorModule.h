@@ -3,6 +3,7 @@
 #include "Modules/ModuleInterface.h"
 
 class FAssetTypeActions_HLSLShaderLibrary;
+class FSlateStyleSet;
 
 class FHLSLShaderEditorModule : public IModuleInterface
 {
@@ -15,5 +16,5 @@ public:
 private:
 	TSharedPtr<FAssetTypeActions_HLSLShaderLibrary> HLSLAssetTypeActions;
 	TSharedPtr<FExtensibilityManager> ToolbarExtensibilityManager;
-
+	static inline TSharedPtr<FSlateStyleSet> StyleSetInstance = nullptr;
 };

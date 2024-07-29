@@ -41,6 +41,9 @@ public class HLSLShaderEditor : ModuleRules
                 "InputCore",
                 "AssetTools",
                 "DeveloperSettings",
+                "PropertyEditor",
+                "ApplicationCore",
+                "Projects",
                 "ToolMenus"
             });
 

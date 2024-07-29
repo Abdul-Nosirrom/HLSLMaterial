@@ -132,6 +132,15 @@ private:
 
 	void RefreshOnScreenMessages();
 
+	void DrawMaterialInfoStrings(
+		FCanvas* Canvas, 
+		const UMaterial* Material, 
+		const class FMaterialResource* MaterialResource, 
+		const TArray<FString>& CompileErrors, 
+		int32 &DrawPositionY,
+		bool bDrawInstructions,
+		bool bGeneratedNewShaders);
+
 private:
 	struct FOnScreenMessage
 	{
@@ -146,10 +155,10 @@ private:
 	TMap< FName, TWeakPtr<class SDockTab> > SpawnedToolPanels;
 
 	/** Preview Viewport widget */
-	TSharedPtr<class SMaterialEditor3DPreviewViewport> PreviewVC;
+	TSharedPtr<class SHLSLMaterialEditor3DPreviewViewport> PreviewVC;
 
 	/** Preview viewport widget used for UI materials */
-	TSharedPtr<class SMaterialEditorUIPreviewViewport> PreviewUIViewport;
+	TSharedPtr<class SHLSLMaterialEditorUIPreviewViewport> PreviewUIViewport;
 
 	/** HLSL Shader Properties View */
 	TSharedPtr<class IDetailsView> HLSLAssetDetails;
@@ -176,5 +185,5 @@ private:
 	static const FName PreviewSettingsTabId;
 
 	/** Object used as material statistics manager */
-	TSharedPtr<class FMaterialStats> MaterialStatsManager;
+	//TSharedPtr<class FMaterialStats> MaterialStatsManager;
 };

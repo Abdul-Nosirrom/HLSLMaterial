@@ -626,18 +626,18 @@ void FHLSLShaderLibraryEditor::GenerateMaterialInstanceForShader(UHLSLShaderLibr
 	}
 	
 	UMaterial* MaterialParent = MaterialPtr->Get();
-	if (!MaterialParent)
+	if (MaterialParent)
 	{
-		FString Error;
 		{
 			// create an unreal material asset
 			FString FixedMaterialName = TEXT("MI_") + Library.GetName();
 			FString NewPackageName = BasePath + TEXT("/") + FixedMaterialName;
 
-			UPackage* Package = UPackageTools::FindOrCreatePackageForAssetType(FName(*NewPackageName), UMaterial::StaticClass());
+			UPackage* Package = UPackageTools::FindOrCreatePackageForAssetType(FName(*NewPackageName), UMaterialInstanceConstant::StaticClass());
 			UMaterialInstanceConstantFactoryNew* MIFactoryNew = NewObject<UMaterialInstanceConstantFactoryNew>();
 			FAssetToolsModule& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-			UObject* CreatedObject = AssetTools.Get().CreateAsset(FixedMaterialName, BasePath, UMaterialInstanceConstant::StaticClass(), MIFactoryNew);
+			UMaterialInstanceConstant* CreatedMaterialInst = Cast<UMaterialInstanceConstant>(AssetTools.Get().CreateAsset(FixedMaterialName, BasePath, UMaterialInstanceConstant::StaticClass(), MIFactoryNew));
+			if (CreatedMaterialInst) CreatedMaterialInst->Parent = MaterialParent;
 			Package->SetDirtyFlag(true);
 		}
 	}

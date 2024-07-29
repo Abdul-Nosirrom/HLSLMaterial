@@ -8,8 +8,12 @@
 #include "AssetTypeActions_Base.h"
 #include "HLSLMaterialSettings.h"
 #include "AssetTypeActions/AssetTypeActions_HLSLShaderLibrary.h"
+#include "Interfaces/IPluginManager.h"
+#include "Styling/SlateStyle.h"
+#include "Styling/SlateStyleRegistry.h"
 
 #define LOCTEXT_NAMESPACE "FHLSLShaderEditorModule"
+#define SLATE_IMAGE_BRUSH( ImagePath, ImageSize ) new FSlateImageBrush( StyleSetInstance->RootToContentDir( TEXT(ImagePath), TEXT(".png") ), FVector2D(ImageSize, ImageSize ) )
 
 void FHLSLShaderEditorModule::StartupModule()
 {
@@ -26,6 +30,21 @@ void FHLSLShaderEditorModule::StartupModule()
 		GetMutableDefault<UHLSLMaterialSettings>());
 
 	ToolbarExtensibilityManager = MakeShareable(new FExtensibilityManager);
+
+	// Setup asset icons
+	{
+		// Create the new style set
+		StyleSetInstance = MakeShareable(new FSlateStyleSet("HLSLShaderEditorStyle"));
+		// Set root directory as resources folder
+		static FString ContentDir = IPluginManager::Get().FindPlugin(TEXT("HLSLMaterial"))->GetBaseDir() / TEXT("Resources");
+		StyleSetInstance->SetContentRoot(ContentDir);
+
+		StyleSetInstance->Set("ClassIcon.HLSLShaderLibrary", SLATE_IMAGE_BRUSH("ShaderAssetIcon", 64.f));
+		StyleSetInstance->Set("ClassThumbnail.HLSLShaderLibrary", SLATE_IMAGE_BRUSH("ShaderAssetIcon", 256.f));
+
+		// Register the style set
+		FSlateStyleRegistry::RegisterSlateStyle(*StyleSetInstance);
+	}
 }
 
 void FHLSLShaderEditorModule::ShutdownModule()
@@ -35,7 +54,14 @@ void FHLSLShaderEditorModule::ShutdownModule()
 	
 	if(!FModuleManager::Get().IsModuleLoaded("AssetTools")) return;
 	FAssetToolsModule::GetModule().Get().UnregisterAssetTypeActions(HLSLAssetTypeActions.ToSharedRef());
+
+	// Unregister style set
+	{
+		FSlateStyleRegistry::UnRegisterSlateStyle(*StyleSetInstance.Get());
+		StyleSetInstance.Reset();
+	}
 }
 
+#undef SLATE_IMAGE_BRUSH
 #undef LOCTEXT_NAMESPACE
 IMPLEMENT_MODULE(FHLSLShaderEditorModule, HLSLShaderEditor);

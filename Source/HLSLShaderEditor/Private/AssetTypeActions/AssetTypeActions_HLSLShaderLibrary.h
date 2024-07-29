@@ -16,7 +16,7 @@ public:
 	{
 		return EAssetTypeCategories::Materials;
 	}
-	virtual FColor GetTypeColor() const override { return FColor(0, 175, 255); }
+	virtual FColor GetTypeColor() const override { return FColor(100, 0, 175); }
 	virtual UClass* GetSupportedClass() const override;
 
 	virtual bool HasActions(const TArray<UObject*>&InObjects) const override { return true; }

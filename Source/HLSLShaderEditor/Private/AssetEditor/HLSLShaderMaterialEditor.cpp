@@ -17,12 +17,11 @@
 #include "Commands/HLSLEditorCommands.h"
 #include "Editor/UnrealEdEngine.h"
 #include "MaterialEditor.h"
-#include "MaterialEditorInstanceDetailCustomization.h"
-#include "MaterialStats.h"
-#include "SMaterialEditorViewport.h"
 #include "MaterialEditor/DEditorRuntimeVirtualTextureParameterValue.h"
 #include "MaterialEditor/DEditorSparseVolumeTextureParameterValue.h"
 #include "MaterialEditor/DEditorTextureParameterValue.h"
+#include "MaterialEditor/HLSLMaterialEditorInstanceDetailCustomization.h"
+#include "MaterialEditor/SHLSLMaterialEditorViewport.h"
 #include "MaterialEditor/MaterialEditorInstanceConstant.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionRuntimeVirtualTextureSampleParameter.h"
@@ -87,8 +86,8 @@ void FHLSLShaderMaterialEditor::InitShaderEditor(const EToolkitMode::Type Mode,
 	MaterialEditorInstance->SetSourceInstance(MaterialInstanceProxy);
 
 	// Setup stats manager
-	MaterialStatsManager = FMaterialStatsUtils::CreateMaterialStats(this, false, true);
-	MaterialStatsManager->SetMaterialsDisplayNames({MaterialEditorInstance->SourceInstance->GetName()});
+	//MaterialStatsManager = FMaterialStatsUtils::CreateMaterialStats(this, false, true);
+	//MaterialStatsManager->SetMaterialsDisplayNames({MaterialEditorInstance->SourceInstance->GetName()});
 
 	// Register our commands. This will only register them if not previously registered
 	FMaterialEditorCommands::Register();
@@ -202,7 +201,7 @@ void FHLSLShaderMaterialEditor::RegisterTabSpawners(const TSharedRef<FTabManager
 		.SetIcon( FSlateIcon( FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details" ) );
 
 	// Notify stats
-	MaterialStatsManager->RegisterTabs();
+	//MaterialStatsManager->RegisterTabs();
 
 	OnRegisterTabSpawners().Broadcast(InTabManager);
 }
@@ -216,7 +215,7 @@ void FHLSLShaderMaterialEditor::UnregisterTabSpawners(const TSharedRef<FTabManag
 	InTabManager->UnregisterTabSpawner(HLSLAssetDetailsTabId);
 	InTabManager->UnregisterTabSpawner(PreviewSettingsTabId);
 
-	MaterialStatsManager->UnregisterTabs();
+	//MaterialStatsManager->UnregisterTabs();
 
 	OnUnregisterTabSpawners().Broadcast(InTabManager);
 }
@@ -305,7 +304,7 @@ void FHLSLShaderMaterialEditor::NotifyPostChange(const FPropertyChangedEvent& Pr
 	RefreshOnScreenMessages();
 
 	// something was changed in the material so we need to reflect this in the stats
-	MaterialStatsManager->SignalMaterialChanged();
+	//MaterialStatsManager->SignalMaterialChanged();
 
 	// Update the preview window when the user changes a property.
 	PreviewVC->RefreshViewport();
@@ -334,8 +333,8 @@ void FHLSLShaderMaterialEditor::DrawMessages(FViewport* Viewport, FCanvas* Canva
 		{
 			const bool bGeneratedNewShaders = MaterialEditorInstance->SourceInstance->bHasStaticPermutationResource;
 			const bool bAllowOldMaterialStats = true;
-			// Lambda copied from FMaterialEditor::DrawMaterialInfoStrings
-			FMaterialEditor::DrawMaterialInfoStrings( Canvas, BaseMaterial, MaterialResource, MaterialResource->GetCompileErrors(), DrawPositionY, bAllowOldMaterialStats, bGeneratedNewShaders );
+			// copied from FMaterialEditor::DrawMaterialInfoStrings since that function isnt exported
+			DrawMaterialInfoStrings( Canvas, BaseMaterial, MaterialResource, MaterialResource->GetCompileErrors(), DrawPositionY, bAllowOldMaterialStats, bGeneratedNewShaders );
 		}
 
 		DrawSamplerWarningStrings( Canvas, DrawPositionY );
@@ -387,8 +386,11 @@ void FHLSLShaderMaterialEditor::SetPreviewMaterial(UMaterialInterface* InMateria
 
 void FHLSLShaderMaterialEditor::Tick(float DeltaTime)
 {
-	MaterialStatsManager->SetMaterial(MaterialEditorInstance->SourceInstance);
-	MaterialStatsManager->Update();
+	// Sometimes the material doesnt get set on start up, so make sure to refresh if its not set
+	if (MaterialEditorInstance->Parent != HLSLAsset->Materials)
+	{
+		NotifyExternalMaterialChange(); // This does the refresh of everything and setting the right material
+	}
 }
 
 TStatId FHLSLShaderMaterialEditor::GetStatId() const
@@ -398,10 +400,19 @@ TStatId FHLSLShaderMaterialEditor::GetStatId() const
 
 void FHLSLShaderMaterialEditor::NotifyExternalMaterialChange()
 {
+	// Called after we finish regenerating the shader/material from the HLSL file
+	if (MaterialEditorInstance->Parent != HLSLAsset->Materials)
+	{
+		MaterialEditorInstance->SourceInstance = nullptr;
+		UMaterialInstanceConstant* MaterialInstanceProxy = NewObject<UMaterialInstanceConstant>(GetTransientPackage(), FName("HLSL_Shader_Preview"), RF_Transactional);
+		checkf(MaterialInstanceProxy, TEXT("Failed to create instanced material"));
+		MaterialInstanceProxy->Parent = HLSLAsset->Materials.Get();
+		MaterialEditorInstance->SetSourceInstance(MaterialInstanceProxy);
+	}
 	RebuildMaterialInstanceEditor();
-	// We wanna refresh the editor here
+	UpdatePreviewViewportsVisibility();
 	Refresh();
-	MaterialStatsManager->SignalMaterialChanged();
+	//MaterialStatsManager->SignalMaterialChanged();
 }
 
 void FHLSLShaderMaterialEditor::UpdatePropertyWindow()
@@ -416,12 +427,14 @@ void FHLSLShaderMaterialEditor::BindCommands()
 	FHLSLEditorCommands::Register();
 
 	const FHLSLEditorCommands& Commands = FHLSLEditorCommands::Get();
-	
-	//ToolkitCommands->MapAction(Commands.FocusViewport,
-	//FExecuteAction::CreateSP(this, &FHLSLShaderMaterialEditor::FocusViewport));
 
 	ToolkitCommands->MapAction(Commands.RecompileShader,
 	FExecuteAction::CreateSP(this, &FHLSLShaderMaterialEditor::OnRecompile));
+
+	ToolkitCommands->MapAction(Commands.CreateMatInstance, FExecuteAction::CreateLambda([this]()
+	{
+		FHLSLShaderLibraryEditor::GenerateMaterialInstanceForShader(*HLSLAsset);
+	}));
 }
 
 void FHLSLShaderMaterialEditor::OnRecompile()
@@ -441,9 +454,9 @@ void FHLSLShaderMaterialEditor::CreateInternalWidgets()
 {
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
 
-	PreviewVC = SNew(SMaterialEditor3DPreviewViewport)
+	PreviewVC = SNew(SHLSLMaterialEditor3DPreviewViewport)
 	.MaterialEditor(SharedThis(this));
-	PreviewUIViewport = SNew(SMaterialEditorUIPreviewViewport, GetMaterialInterface());
+	PreviewUIViewport = SNew(SHLSLMaterialEditorUIPreviewViewport, GetMaterialInterface());
 
 	// Create HLSL asset details
 	{
@@ -471,7 +484,7 @@ void FHLSLShaderMaterialEditor::CreateInternalWidgets()
 		MaterialInstanceDetails->SetCustomValidatePropertyNodesFunction(FOnValidateDetailsViewPropertyNodes::CreateLambda(MoveTemp(ValidationLambda)));
 
 		FOnGetDetailCustomizationInstance LayoutMICDetails = FOnGetDetailCustomizationInstance::CreateStatic( 
-			&FMaterialInstanceParameterDetails::MakeInstance, MaterialEditorInstance.Get(), FGetShowHiddenParameters::CreateLambda([](bool& bShowHidden) {bShowHidden = true; }) );
+			&FHLSLMaterialInstanceParameterDetails::MakeInstance, MaterialEditorInstance.Get(), FGetShowHiddenParameters::CreateLambda([](bool& bShowHidden) {bShowHidden = true; }) );
 		MaterialInstanceDetails->RegisterInstancedCustomPropertyLayout( UMaterialEditorInstanceConstant::StaticClass(), LayoutMICDetails );
 		//MaterialInstanceDetails->SetCustomFilterLabel(LOCTEXT("ShowOverriddenOnly", "Show Only Overridden Parameters"));
 		//MaterialInstanceDetails->SetCustomFilterDelegate(FSimpleDelegate::CreateSP(this, &FMaterialInstanceEditor::FilterOverriddenProperties));
@@ -507,12 +520,9 @@ void FHLSLShaderMaterialEditor::RegisterToolBar()
 		{
 			FToolMenuSection& MaterialInstanceSection = ToolBar->AddSection("HLSLShaderTools", TAttribute<FText>(), InsertAfterAssetSection);
 
-			MaterialInstanceSection.AddEntry(FToolMenuEntry::InitToolBarButton(FHLSLEditorCommands::Get().FocusViewport));
 			MaterialInstanceSection.AddEntry(FToolMenuEntry::InitToolBarButton(FHLSLEditorCommands::Get().RecompileShader));
+			MaterialInstanceSection.AddEntry(FToolMenuEntry::InitToolBarButton(FHLSLEditorCommands::Get().CreateMatInstance));
 		}
-
-		//FToolMenuSection& UISection = ToolBar->AddSection("Stats", TAttribute<FText>(), InsertAfterAssetSection);
-		//UISection.AddEntry(FToolMenuEntry::InitToolBarButton(FMaterialEditorCommands::Get().TogglePlatformStats));
 	}
 }
 
@@ -786,6 +796,237 @@ void FHLSLShaderMaterialEditor::RefreshOnScreenMessages()
 				}
 			}
 		}
+	}
+}
+
+void FHLSLShaderMaterialEditor::DrawMaterialInfoStrings(FCanvas* Canvas, const UMaterial* Material,
+	const FMaterialResource* MaterialResource, const TArray<FString>& CompileErrors, int32& DrawPositionY,
+	bool bDrawInstructions, bool bGeneratedNewShaders)
+{
+		check(Material && MaterialResource);
+
+	ERHIFeatureLevel::Type FeatureLevel = MaterialResource->GetFeatureLevel();
+	FString FeatureLevelName;
+	GetFeatureLevelName(FeatureLevel,FeatureLevelName);
+
+	// The font to use when displaying info strings
+	UFont* FontToUse = GEngine->GetTinyFont();
+	const int32 SpacingBetweenLines = 13;
+
+	if (bDrawInstructions)
+	{
+		// Display any errors and messages in the upper left corner of the viewport.
+		TArray<FMaterialStatsUtils::FShaderInstructionsInfo> Descriptions;
+
+		// Copied from FMaterialShaderUtils::GetRepresentativeInstructionCount since its not exported
+		{
+			auto GetShaderString = [](const FShader::FShaderStatisticMap& Statistics)
+			{
+				TStringBuilder<2048> StatisticsStrBuilder;
+				for (const auto& Stat : Statistics)
+				{
+					StatisticsStrBuilder << Stat.Key << ": ";
+					Visit([&StatisticsStrBuilder](auto& StoredValue)
+					{
+						StatisticsStrBuilder << StoredValue << "\n";
+					}, Stat.Value);
+				}
+
+				return StatisticsStrBuilder.ToString();
+			};
+			
+			const FMaterialShaderMap* MaterialShaderMap = MaterialResource->GetGameThreadShaderMap();
+
+			if (MaterialShaderMap)
+			{
+				TMap<FName, TArray<FMaterialStatsUtils::FRepresentativeShaderInfo>> ShaderTypeNamesAndDescriptions;
+				FMaterialStatsUtils::GetRepresentativeShaderTypesAndDescriptions(ShaderTypeNamesAndDescriptions, MaterialResource);
+				TStaticArray<bool, (int32)ERepresentativeShader::Num> bShaderTypeAdded(InPlace, false);
+		
+				if (MaterialResource->IsUIMaterial())
+				{
+					//for (const TPair<FName, FRepresentativeShaderInfo>& ShaderTypePair : ShaderTypeNamesAndDescriptions)
+					for (auto DescriptionPair : ShaderTypeNamesAndDescriptions)
+					{
+						auto& DescriptionArray = DescriptionPair.Value;
+						for (int32 i = 0; i < DescriptionArray.Num(); ++i)
+						{
+							const FMaterialStatsUtils::FRepresentativeShaderInfo& ShaderInfo = DescriptionArray[i];
+							if (!bShaderTypeAdded[(int32)ShaderInfo.ShaderType])
+							{
+								FShaderType* ShaderType = FindShaderTypeByName(ShaderInfo.ShaderName);
+								check(ShaderType);
+								const int32 NumInstructions = MaterialShaderMap->GetMaxNumInstructionsForShader(ShaderType);
+
+								FMaterialStatsUtils::FShaderInstructionsInfo Info;
+								Info.ShaderType = ShaderInfo.ShaderType;
+								Info.ShaderDescription = ShaderInfo.ShaderDescription;
+								Info.InstructionCount = NumInstructions;
+								Info.ShaderStatisticsString = GetShaderString(MaterialShaderMap->GetShaderStatisticsMapForShader(ShaderType));
+								if (Info.ShaderStatisticsString.Len() == 0)
+								{
+									Info.ShaderStatisticsString = TEXT("n/a");
+								}
+
+								Descriptions.Push(Info);
+
+								bShaderTypeAdded[(int32)ShaderInfo.ShaderType] = true;
+							}
+						}
+					}
+				}
+				else
+				{
+					for (auto DescriptionPair : ShaderTypeNamesAndDescriptions)
+					{
+						FVertexFactoryType* FactoryType = FindVertexFactoryType(DescriptionPair.Key);
+						const FMeshMaterialShaderMap* MeshShaderMap = MaterialShaderMap->GetMeshShaderMap(FactoryType);
+						if (MeshShaderMap)
+						{
+							TMap<FHashedName, TShaderRef<FShader>> ShaderMap;
+							MeshShaderMap->GetShaderList(*MaterialShaderMap, ShaderMap);
+
+							auto& DescriptionArray = DescriptionPair.Value;
+
+							for (int32 i = 0; i < DescriptionArray.Num(); ++i)
+							{
+								const FMaterialStatsUtils::FRepresentativeShaderInfo& ShaderInfo = DescriptionArray[i];
+								if (!bShaderTypeAdded[(int32)ShaderInfo.ShaderType])
+								{
+									TShaderRef<FShader>* ShaderEntry = ShaderMap.Find(ShaderInfo.ShaderName);
+									if (ShaderEntry != nullptr)
+									{
+										FShaderType* ShaderType = (*ShaderEntry).GetType();
+										{
+											const int32 NumInstructions = MeshShaderMap->GetMaxNumInstructionsForShader(*MaterialShaderMap, ShaderType);
+
+											FMaterialStatsUtils::FShaderInstructionsInfo Info;
+											Info.ShaderType = ShaderInfo.ShaderType;
+											Info.ShaderDescription = ShaderInfo.ShaderDescription;
+											Info.InstructionCount = NumInstructions;
+											Info.ShaderStatisticsString = GetShaderString(MeshShaderMap->GetShaderStatisticsMapForShader(*MaterialShaderMap, ShaderType));
+											if (Info.ShaderStatisticsString.Len() == 0)
+											{
+												Info.ShaderStatisticsString = TEXT("n/a");
+											}
+
+											Descriptions.Push(Info);
+
+											bShaderTypeAdded[(int32)ShaderInfo.ShaderType] = true;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		for (int32 InstructionIndex = 0; InstructionIndex < Descriptions.Num(); InstructionIndex++)
+		{
+			FString InstructionCountString = FString::Printf(TEXT("%s: %u instructions"), *Descriptions[InstructionIndex].ShaderDescription, Descriptions[InstructionIndex].InstructionCount);
+			Canvas->DrawShadowedString(5, DrawPositionY, *InstructionCountString, FontToUse, FLinearColor(1, 1, 0));
+			DrawPositionY += SpacingBetweenLines;
+		}
+
+		// Display the number of texture samplers and samplers used by the material.
+		const int32 SamplersUsed = MaterialResource->GetSamplerUsage();
+
+		if (SamplersUsed >= 0)
+		{
+			int32 MaxSamplers = GetExpectedFeatureLevelMaxTextureSamplers(MaterialResource->GetFeatureLevel());
+
+			Canvas->DrawShadowedString(
+				5,
+				DrawPositionY,
+				*FString::Printf(TEXT("%s samplers: %u/%u"), FeatureLevel <= ERHIFeatureLevel::ES3_1 ? TEXT("Mobile texture") : TEXT("Texture"), SamplersUsed, MaxSamplers),
+				FontToUse,
+				SamplersUsed > MaxSamplers ? FLinearColor(1,0,0) : FLinearColor(1,1,0)
+				);
+			DrawPositionY += SpacingBetweenLines;
+		}
+
+		uint32 NumVSTextureSamples = 0, NumPSTextureSamples = 0;
+		MaterialResource->GetEstimatedNumTextureSamples(NumVSTextureSamples, NumPSTextureSamples);
+
+		if (NumVSTextureSamples > 0 || NumPSTextureSamples > 0)
+		{
+			Canvas->DrawShadowedString(
+				5,
+				DrawPositionY,
+				*FString::Printf(TEXT("Texture Lookups (Est.): VS(%u), PS(%u)"), NumVSTextureSamples, NumPSTextureSamples),
+				FontToUse,
+				FLinearColor(1,1,0)
+				);
+			DrawPositionY += SpacingBetweenLines;
+		}
+
+		uint32 NumVirtualTextureLookups = MaterialResource->GetEstimatedNumVirtualTextureLookups();
+		if (NumVirtualTextureLookups > 0)
+		{
+			Canvas->DrawShadowedString(
+				5,
+				DrawPositionY,
+				*FString::Printf(TEXT("Virtual Texture Lookups (Est.): %u"), NumVirtualTextureLookups),
+				FontToUse,
+				FLinearColor(1, 1, 0)
+			);
+			DrawPositionY += SpacingBetweenLines;
+		}
+
+		const uint32 NumVirtualTextureStacks = MaterialResource->GetNumVirtualTextureStacks();
+		if (NumVirtualTextureStacks > 0)
+		{
+			Canvas->DrawShadowedString(
+				5,
+				DrawPositionY,
+				*FString::Printf(TEXT("Virtual Texture Stacks: %u"), NumVirtualTextureStacks),
+				FontToUse,
+				FLinearColor(1, 1, 0)
+			);
+			DrawPositionY += SpacingBetweenLines;
+		}
+
+		TStaticArray<uint16, (int)ELWCFunctionKind::Max> LWCFuncUsages = MaterialResource->GetEstimatedLWCFuncUsages();
+		for (int KindIndex = 0; KindIndex < (int)ELWCFunctionKind::Max; ++KindIndex)
+		{
+			int Usages = LWCFuncUsages[KindIndex];
+			if (LWCFuncUsages[KindIndex] > 0)
+			{
+				Canvas->DrawShadowedString(
+					5,
+					DrawPositionY,
+					*FString::Printf(TEXT("LWC %s usages (Est.): %u"), *UEnum::GetDisplayValueAsText((ELWCFunctionKind)KindIndex).ToString(), Usages),
+					FontToUse,
+					FLinearColor(1,1,0)
+				);
+				DrawPositionY += SpacingBetweenLines;
+			}
+		}
+
+		if (bGeneratedNewShaders)
+		{
+			int32 NumShaders = 0;
+			int32 NumPipelines = 0;
+			if(FMaterialShaderMap* ShaderMap = MaterialResource->GetGameThreadShaderMap())
+			{
+				ShaderMap->CountNumShaders(NumShaders, NumPipelines);
+			}
+
+			if (NumShaders)
+			{
+				FString ShaderCountString = FString::Printf(TEXT("Num shaders added: %i"), NumShaders);
+				Canvas->DrawShadowedString(5, DrawPositionY, *ShaderCountString, FontToUse, FLinearColor(1, 0.8, 0));
+				DrawPositionY += SpacingBetweenLines;
+			}
+		}
+	}
+
+	for(int32 ErrorIndex = 0; ErrorIndex < CompileErrors.Num(); ErrorIndex++)
+	{
+		Canvas->DrawShadowedString(5, DrawPositionY, *FString::Printf(TEXT("[%s] %s"), *FeatureLevelName, *CompileErrors[ErrorIndex]), FontToUse, FLinearColor(1, 0, 0));
+		DrawPositionY += SpacingBetweenLines;
 	}
 }
 

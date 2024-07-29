@@ -10,6 +10,7 @@ class UHLSLShaderLibrary;
 
 class FHLSLShaderLibraryEditor
 {
+	friend class FHLSLShaderMaterialEditor;
 	friend class FAssetTypeActions_HLSLShaderLibrary;
 	
 public:

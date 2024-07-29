@@ -7,8 +7,8 @@
 
 void FHLSLEditorCommands::RegisterCommands()
 {
-	UI_COMMAND(FocusViewport, "Focus Viewport", "Focus Viewport on Mesh", EUserInterfaceActionType::Button, FInputChord(EKeys::F));
 	UI_COMMAND(RecompileShader, "Recompile", "Recompiles Shader", EUserInterfaceActionType::Button, FInputChord(EKeys::C));
+	UI_COMMAND(CreateMatInstance, "Create Mat Instance", "New Material Instance", EUserInterfaceActionType::Button, FInputChord());
 }
 
 #undef LOCTEXT_NAMESPACE

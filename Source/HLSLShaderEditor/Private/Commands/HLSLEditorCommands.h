@@ -18,11 +18,12 @@ public:
 		
 	}
 	
-	/** Focuses Viewport on Mesh */
-	TSharedPtr<FUICommandInfo> FocusViewport;
-
 	/** Recompiles Shader */
 	TSharedPtr<FUICommandInfo> RecompileShader;
+
+	/** Creates A Material Instance */
+	TSharedPtr<FUICommandInfo> CreateMatInstance;
+
 	
 	/** Initialize commands */
 	virtual void RegisterCommands() override;
