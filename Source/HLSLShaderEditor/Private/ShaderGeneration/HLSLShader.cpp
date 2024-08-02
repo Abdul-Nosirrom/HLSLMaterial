@@ -455,7 +455,7 @@ FString FHLSLShaderInputMeta::VerifyMetaData(const UHLSLShaderLibrary& Library, 
 	}
 	if (Tag == "primitivedata")
 	{
-		if (AssociatedInput != FunctionInput_Scalar || AssociatedInput != FunctionInput_Vector2 || AssociatedInput != FunctionInput_Vector3 || AssociatedInput != FunctionInput_Vector4)
+		if (AssociatedInput != FunctionInput_Scalar && AssociatedInput != FunctionInput_Vector2 && AssociatedInput != FunctionInput_Vector3 && AssociatedInput != FunctionInput_Vector4)
 		{
 			return "Invalid parameter type for parameter that is meant to be used as custom primitive data";
 		}
