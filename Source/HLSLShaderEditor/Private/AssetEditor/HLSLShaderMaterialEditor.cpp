@@ -433,6 +433,7 @@ void FHLSLShaderMaterialEditor::BindCommands()
 
 	ToolkitCommands->MapAction(Commands.CreateMatInstance, FExecuteAction::CreateLambda([this]()
 	{
+		// Can use the existing
 		FHLSLShaderLibraryEditor::GenerateMaterialInstanceForShader(*HLSLAsset);
 	}));
 }

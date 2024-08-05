@@ -1,6 +1,4 @@
-﻿// Copyright Phyronnaz
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Factories/Factory.h"
@@ -16,7 +14,7 @@ public:
 	UHLSLShaderLibraryFactory()
 	{
 		bCreateNew = true;
-		bEditorImport = false;
+		bEditorImport = false; // Allowing us to import from the editor
 		bEditAfterNew = true;
 		SupportedClass = UHLSLShaderLibrary::StaticClass();
 	}

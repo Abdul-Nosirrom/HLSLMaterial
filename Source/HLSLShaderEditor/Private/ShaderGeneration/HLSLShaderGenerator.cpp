@@ -342,6 +342,7 @@ FString FHLSLShaderGenerator::GenerateFunctionCode(const UHLSLShaderLibrary& Lib
 {
 	FString Code;
 
+	// In the pixel shader, replace any instances of return; with return 0.f; to make the custom HLSL expression happy (it requires an actual return value)
 	if (Shader.ShaderStage == FHLSLMaterialShader::PIXEL_SHADER)
 		Code += Shader.Body.Replace(TEXT("return"), TEXT("return 0.f"));
 	else Code += Shader.Body;

@@ -496,8 +496,45 @@ void FHLSLShaderLibraryEditor::Generate(UHLSLShaderLibrary& Library)
 		Library.Materials->FunctionEditorComments.Empty();
 		
 		// Generate the actual shader/material graph
+		// Figure out which shader stage to add the includes to
+		FString ShaderStageIncludes = "";
+		for (const FHLSLMaterialShader& Shader : Shaders)
+		{
+			// Have to add the includes once only and it must be done on the first one. The reason being is the generated code ends up looking like:
+			// #include "includes"
+			// void CustomExpression0() // Normal
+			// void CustomExpression1() // Pixel
+			// void CustomExpression2() // Vertex
+			// It seems like the order of each generated function is pretty consistent, with the normal always being first and vertex being last. So whenever we encounter a higher priority one we'll set that
+			// to be the one to declare the includes so its there before all the functions
+
+			if (ShaderStageIncludes.IsEmpty()) ShaderStageIncludes = Shader.ShaderStage;
+			else if (ShaderStageIncludes != FHLSLMaterialShader::NORMAL_SHADER)
+			{
+				// Normal shader overrides everything
+				// Pixel shader overrides vertex
+				// Vertex shader overrides nothing
+				if (Shader.ShaderStage == FHLSLMaterialShader::NORMAL_SHADER)
+				{
+					ShaderStageIncludes = Shader.ShaderStage; break;
+				}
+				if (Shader.ShaderStage == FHLSLMaterialShader::PIXEL_SHADER)
+				{
+					ShaderStageIncludes = Shader.ShaderStage;
+				}
+			}
+		}
+
+		// Before we start generating the shader, lets make sure to recompile changed ush files. This is so if we were modifying stuff in includes, it'll be reflected (otherwise it wont until we manually do it)
+		if (true) // Maybe it can be an option
+		{
+			GEngine->Exec(GEditor->GetEditorWorldContext().World(), TEXT("RECOMPILESHADERS CHANGED"));
+		}
+
 		for (FHLSLMaterialShader Shader : Shaders)
 		{
+			TArray<FString> IncludesToUse = ShaderStageIncludes.Equals(Shader.ShaderStage) ? IncludeFilePaths : TArray<FString>();
+
 			Shader.HashedString = Shader.GenerateHashedString(BaseHash);
 
 			// Add dummy output for loops to work
@@ -512,7 +549,7 @@ void FHLSLShaderLibraryEditor::Generate(UHLSLShaderLibrary& Library)
 
 			const FString Error = FHLSLShaderGenerator::GenerateShader(
 				Library,
-				IncludeFilePaths,
+				IncludesToUse,
 				Shader,
 				ParameterGuids);
 		
@@ -530,7 +567,7 @@ void FHLSLShaderLibraryEditor::Generate(UHLSLShaderLibrary& Library)
 		// Mark material as dirty and recompile its shader
 		FMaterialUpdateContext UpdateContext;
 		UpdateContext.AddMaterial(Library.Materials.Get());
-		UMaterialEditingLibrary::RecompileMaterial(Library.Materials.Get());
+		UMaterialEditingLibrary::RecompileMaterial(Library.Materials.Get()); // BUG: This sometimes causes a crash w/ shader compilation jobs stuff
 
 		// Refresh our custom editor
 		if (IAssetEditorInstance* AssetEditorInstance = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->FindEditorForAsset(&Library, false))
@@ -618,7 +655,7 @@ void FHLSLShaderLibraryEditor::GenerateMaterialInstanceForShader(UHLSLShaderLibr
 	FString BasePath = FPackageName::ObjectPathToPackageName(Library.GetPathName());
 	if (Library.bPutFunctionsInSubdirectory)
 	{
-		BasePath += "_Instances";
+		BasePath += "_Generated";//"_Instances"; NOTE: Option in plugin settings to specify where to put the generated materials & instances
 	}
 	else
 	{
