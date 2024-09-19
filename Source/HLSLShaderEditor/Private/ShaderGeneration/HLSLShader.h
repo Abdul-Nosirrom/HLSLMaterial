@@ -51,9 +51,8 @@ struct FHLSLShaderInput
 	static bool ParseDefaultValue(const FString& DefaultValue, int32 Dimension, FVector4& OutValue);
 	
 	UMaterialExpression* GetInputExpression(UHLSLShaderLibrary& Library, const FGuid ParamGUID, int32 Index, const FString& BasePath) const;
-	void SetupParameterMetaTags(UMaterialExpressionParameter* Parameter) const;
-	void SetupParameterTextureMetaTags(UMaterialExpressionTextureObjectParameter* Parameter) const;
-	UMaterialExpression* GetUniqueInputExpression(UHLSLShaderLibrary& Library, const FHLSLShaderInputMeta& MetaTag, int32 Index) const;
+	void SetupParameterMetaTags(UMaterialExpression* Parameter) const;
+
 	UClass* GetBranchExpressionClass(bool& bRequiresBoolInput, int32& TrueIdx, int32& FalseIdx) const;
 };
 

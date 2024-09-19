@@ -9,6 +9,7 @@
 #include "HLSLMaterialSettings.h"
 #include "AssetTypeActions/AssetTypeActions_HLSLShaderLibrary.h"
 #include "Interfaces/IPluginManager.h"
+#include "ShaderGeneration/HLSLShaderGenerator.h"
 #include "Styling/SlateStyle.h"
 #include "Styling/SlateStyleRegistry.h"
 
@@ -45,6 +46,9 @@ void FHLSLShaderEditorModule::StartupModule()
 		// Register the style set
 		FSlateStyleRegistry::RegisterSlateStyle(*StyleSetInstance);
 	}
+
+	// Initialize generator structures
+	FHLSLShaderGenerator::Initialize();
 }
 
 void FHLSLShaderEditorModule::ShutdownModule()

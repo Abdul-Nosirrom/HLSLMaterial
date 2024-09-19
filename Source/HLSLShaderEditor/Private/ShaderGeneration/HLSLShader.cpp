@@ -4,12 +4,14 @@
 #include "HLSLShader.h"
 
 #include "HLSLMaterialUtilities.h"
+#include "HLSLShaderGenerator.h"
 #include "SceneTypes.h"
 #include "Internationalization/Regex.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionFunctionInput.h"
 #include "HLSLShaderLibrary.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "MetaTags/HLSLMetaTagHandler.h"
 
 FString FHLSLShaderOutput::ParseTypeAndSemantic(FHLSLShaderOutput& Output)
 {
@@ -433,92 +435,23 @@ FString FHLSLShaderInputMeta::GetMetaDataFromString(const UHLSLShaderLibrary& Li
 FString FHLSLShaderInputMeta::VerifyMetaData(const UHLSLShaderLibrary& Library, int NumTags, EFunctionInputType AssociatedInput,
 	const FHLSLShaderInputMeta& MetaData)
 {
-	static TArray<FString> SoloTags = {"parametercollection", "particles", "preskinnedlocalposition", "preskinnedlocalnormal"};
-	static TMap<FString, TArray<int>> ParameterCountCheck =
-		{
-		{"group", {1}},
-		{"channels", {1}},
-		{"range", {2}},
-		{"parametercollection", {1}},
-		{"primitivedata", {1}},
-		{"particles", {1,2}},
-		{"samplertype", {1}}
-		};
-
 	const FString Tag = MetaData.Tag.ToLower();
 
-	if (NumTags > 1 && SoloTags.Contains(Tag)) return FString::Printf(TEXT("%s: Invalid Tags, supports 1 tag existing at once"), *Tag);
-	if (ParameterCountCheck.Contains(Tag) && !ParameterCountCheck[Tag].Contains(MetaData.Parameters.Num())) return FString::Printf(TEXT("%s: Invalid parameters"), *Tag);
-	
-	if (Tag == "group")
-	{
-	}
-	if (Tag == "primitivedata")
-	{
-		if (AssociatedInput != FunctionInput_Scalar && AssociatedInput != FunctionInput_Vector2 && AssociatedInput != FunctionInput_Vector3 && AssociatedInput != FunctionInput_Vector4)
-		{
-			return "Invalid parameter type for parameter that is meant to be used as custom primitive data";
-		}
-	}
-	if (Tag == "range")
-	{
-		if (AssociatedInput != FunctionInput_Scalar)
-		{
-			return "Range metatag expects a scalar parameter";
-		}
-	}
-	if (Tag == "parametercollection")
-	{
-		if (AssociatedInput != FunctionInput_Scalar && AssociatedInput != FunctionInput_Vector4)
-		{
-			return "Parameter collection expects a float or float4, neither is provided";
-		}
-		
-		// Verify that we have the parameter collection
-		bool bSuccess = false;
-		for (const UMaterialParameterCollection* Collection : Library.ParameterCollections)
-		{
-			if (bSuccess) break;
-			
-			if (!Collection) continue;
+	const bool bIsRegularTag = FHLSLShaderGenerator::MetaTagStructMap.Contains(Tag);
+	const bool bIsUniqueTag = FHLSLShaderGenerator::UniqueMetaTagStructMap.Contains(Tag);
+	// Do we support this meta tag?
+	if (!bIsUniqueTag && !bIsRegularTag) return FString::Printf(TEXT("%s: Given meta tag not supported!"), *Tag);
+	// If its a unique tag, are there other tags with this parameter
+	if (NumTags > 1 && bIsUniqueTag) return FString::Printf(TEXT("%s: Unique expression tag should be the only tag on a parameter!"), *Tag);
+	// Verify that the number of inputs to this tag are valid
+	const TArray<int> ParameterCount = bIsRegularTag ? FHLSLShaderGenerator::MetaTagStructMap[Tag]->GetNumParameters() : FHLSLShaderGenerator::UniqueMetaTagStructMap[Tag]->GetNumParameters();
+	if (!ParameterCount.Contains(MetaData.Parameters.Num())) return FString::Printf(TEXT("%s: Invalid parameters count"), *Tag);
 
-			if (AssociatedInput == EFunctionInputType::FunctionInput_Scalar)
-			{
-				for (const FCollectionScalarParameter& ScalarParam : Collection->ScalarParameters)
-				{
-					// Break upon success
-					if (MetaData.Parameters[0].ToLower().Equals(ScalarParam.ParameterName.ToString().ToLower())) { bSuccess = true; break;}
-				}
-			}
-			else if (AssociatedInput == EFunctionInputType::FunctionInput_Vector4)
-			{
-				for (const FCollectionVectorParameter& VectorParams : Collection->VectorParameters)
-				{
-					// Break upon success
-					if (MetaData.Parameters[0].ToLower().Equals(VectorParams.ParameterName.ToString().ToLower())) { bSuccess = true; break;}
-				}
-			}
-		}
-		
-		if (!bSuccess)
-		{
-			return FString::Printf(TEXT("ERROR: Parameter collection for type [%s] not found"), *MetaData.Parameters[0]);
-		}
-	}
-	if (Tag == "particles")
-	{
-		if (AssociatedInput != EFunctionInputType::FunctionInput_Vector4)
-		{
-			return "Particles input requires a float4 type";
-		}
-	}
-	if (Tag == "samplertype")
-	{
-		if (AssociatedInput != EFunctionInputType::FunctionInput_Texture2D)
-		{
-			return "Sampler type meta tag is only valid on texture inputs";
-		}
-	}
+	// Now we can run each specific validation script
+	if (bIsRegularTag) return FHLSLShaderGenerator::MetaTagStructMap[Tag]->Validate(Library, AssociatedInput, MetaData);
+	if (bIsUniqueTag) return FHLSLShaderGenerator::UniqueMetaTagStructMap[Tag]->Validate(Library, AssociatedInput, MetaData);
+
+	checkf(false, TEXT("Something went terribly wrong..."));
 
 	return "";
 }

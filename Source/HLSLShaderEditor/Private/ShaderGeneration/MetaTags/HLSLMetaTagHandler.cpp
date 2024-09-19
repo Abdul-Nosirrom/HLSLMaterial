@@ -1,0 +1,8 @@
+﻿#include "HLSLMetaTagHandler.h"
+#include "HLSLMaterialUtilities.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialExpressionAppendVector.h"
+#include "Materials/MaterialExpressionCollectionParameter.h"
+#include "Materials/MaterialExpressionDynamicParameter.h"
+#include "Materials/MaterialExpressionFunctionInput.h"
+#include "Materials/MaterialParameterCollection.h"

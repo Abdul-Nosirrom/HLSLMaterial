@@ -36,6 +36,7 @@ public class HLSLShaderEditor : ModuleRules
                 "HLSLMaterialEditor",
                 "HLSLMaterialRuntime",
                 "MaterialEditor",
+                "Landscape",
                 "UnrealEd",
                 "AdvancedPreviewScene",
                 "InputCore",

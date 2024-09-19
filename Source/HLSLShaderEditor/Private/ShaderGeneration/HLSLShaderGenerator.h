@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "MaterialShader.h"
 
 class UHLSLShaderLibrary;
 class UMaterialExpressionParameter;
@@ -11,6 +10,7 @@ struct FHLSLShaderInput;
 struct FHLSLMaterialShader;
 class IMaterialEditor;
 
+// NOTE: make this or libraryeditor an editor subsystem? libraryeditor makes sense since it deals with creating and managing the material asset...
 class FHLSLShaderGenerator
 {
 public:
@@ -22,4 +22,10 @@ public:
 
 	static FString GenerateFunctionCode(const UHLSLShaderLibrary& Library, const FHLSLMaterialShader& Function, const FString& Declarations);
 	static IMaterialEditor* FindMaterialEditorForAsset(UObject* InAsset);
+
+	// All the modular pieces for generating materials
+	static TMap<FString, TUniquePtr<struct FHLSLMetaTagHandler>> MetaTagStructMap;
+	static TMap<FString, TUniquePtr<struct FHLSLUniqueMetaTagHandler>> UniqueMetaTagStructMap;
+	static TArray<TUniquePtr<struct FHLSLDependencyHandler>> DependencyHandlers;
+	static void Initialize();
 };

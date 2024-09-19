@@ -24,8 +24,15 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/UObjectIterator.h"
 #include "MaterialEditor.h"
+#include "Dependencies/HLSLDependencyHandler.h"
 #include "Materials/MaterialExpressionSceneTexture.h"
+#include "Materials/MaterialExpressionSkyAtmosphereLightIlluminance.h"
+#include "MetaTags/HLSLUniqueParameterMetaTags.h"
 
+// Our modular structs
+TMap<FString, TUniquePtr<FHLSLMetaTagHandler>> FHLSLShaderGenerator::MetaTagStructMap;
+TMap<FString, TUniquePtr<FHLSLUniqueMetaTagHandler>> FHLSLShaderGenerator::UniqueMetaTagStructMap;
+TArray<TUniquePtr<FHLSLDependencyHandler>> FHLSLShaderGenerator::DependencyHandlers;
 
 FString FHLSLShaderGenerator::GenerateShader(UHLSLShaderLibrary& Library, const TArray<FString>& IncludeFilePaths,
                                              FHLSLMaterialShader Shader, const TMap<FName, FGuid>& ParameterGuids)
@@ -33,29 +40,6 @@ FString FHLSLShaderGenerator::GenerateShader(UHLSLShaderLibrary& Library, const 
 	///////////////////////////////////////////////////////////////////////////////////
 	//// Past this point, try to never error out as it'll break existing functions ////
 	///////////////////////////////////////////////////////////////////////////////////
-
-	// Figure out any parameters we need to inject into the material so UEs compiler is happy (TexCoords, SceneSamplers, etc...)
-
-#pragma region Figure Out Used Params
-	// Detect used texture coordinates
-	int32 MaxTexCoordinateUsed = -1;
-	{
-		FRegexPattern RegexPattern(R"_(Parameters.TexCoords\[([0-9]+)\])_");
-		FRegexMatcher RegexMatcher(RegexPattern, Shader.Body);
-		while (RegexMatcher.FindNext())
-		{
-			MaxTexCoordinateUsed = FMath::Max(MaxTexCoordinateUsed, FCString::Atoi(*RegexMatcher.GetCaptureGroup(1)));
-		}
-	}
-
-	// Detect used scene texture look-up
-	const bool bSceneTextureUsed = Shader.Body.Contains("SceneTextureLookup", ESearchCase::CaseSensitive);
-	// Detect used vertex colors
-	const bool bVertexColorUsed = Shader.Body.Contains("Parameters.VertexColor", ESearchCase::CaseSensitive);
-	// Detect whether NEEDS_WORLD_POSITION_EXCLUDING_SHADER_OFFSETS is required
-	const bool bNeedsWorldPositionExcludingShaderOffsets = Shader.Body.Contains("GetWorldPosition_NoMaterialOffsets", ESearchCase::CaseSensitive);
-#pragma endregion
-
 	
 	// Mark material as dirty once we're done
 	ON_SCOPE_EXIT
@@ -193,70 +177,9 @@ FString FHLSLShaderGenerator::GenerateShader(UHLSLShaderLibrary& Library, const 
 		
 		// Create the dummies necessary for certain things to compile for UE 
 		{
-			if (MaxTexCoordinateUsed != -1)
+			for (auto const& dep : DependencyHandlers)
 			{
-				// Create a dummy texture coordinate index to ensure NUM_TEX_COORD_INTERPOLATORS is correct
-
-				UMaterialExpressionTextureCoordinate* TextureCoordinate = NewObject<UMaterialExpressionTextureCoordinate>(Library.Materials.Get());
-				TextureCoordinate->MaterialExpressionGuid = FGuid::NewGuid();
-				TextureCoordinate->bCollapsed = true;
-				TextureCoordinate->CoordinateIndex = MaxTexCoordinateUsed;
-				TextureCoordinate->MaterialExpressionEditorX = MaterialExpressionCustom->MaterialExpressionEditorX - 200;
-				TextureCoordinate->MaterialExpressionEditorY = MaterialExpressionCustom->MaterialExpressionEditorY;
-				Library.Materials->FunctionExpressions.Add(TextureCoordinate);
-
-				FCustomInput& CustomInput = MaterialExpressionCustom->Inputs.Emplace_GetRef();
-				CustomInput.InputName = "DUMMY_COORDINATE_INPUT";
-				CustomInput.Input.Connect(0, TextureCoordinate);
-			}
-
-			if (bSceneTextureUsed)
-			{
-				UMaterialExpressionSceneTexture* SceneTexture = NewObject<UMaterialExpressionSceneTexture>(Library.Materials.Get());
-				SceneTexture->MaterialExpressionGuid = FGuid::NewGuid();
-				SceneTexture->bCollapsed = true;
-				SceneTexture->SceneTextureId = ESceneTextureId::PPI_PostProcessInput0;
-				SceneTexture->MaterialExpressionEditorX = MaterialExpressionCustom->MaterialExpressionEditorX - 200;
-				SceneTexture->MaterialExpressionEditorY = MaterialExpressionCustom->MaterialExpressionEditorY;
-				Library.Materials->FunctionExpressions.Add(SceneTexture);
-
-				FCustomInput& CustomInput = MaterialExpressionCustom->Inputs.Emplace_GetRef();
-				CustomInput.InputName = "DUMMY_SCENETEX_INPUT";
-				CustomInput.Input.Connect(0, SceneTexture);
-
-			}
-
-			if (bVertexColorUsed)
-			{
-				// Create a dummy vertex color parameter to ensure INTERPOLATE_VERTEX_COLOR is correct
-
-				UMaterialExpressionVertexColor* Color = NewObject<UMaterialExpressionVertexColor>(Library.Materials.Get());
-				Color->MaterialExpressionGuid = FGuid::NewGuid();
-				Color->bCollapsed = true;
-				Color->MaterialExpressionEditorX = MaterialExpressionCustom->MaterialExpressionEditorX - 200;
-				Color->MaterialExpressionEditorY = MaterialExpressionCustom->MaterialExpressionEditorY;
-				Library.Materials->FunctionExpressions.Add(Color);
-
-				FCustomInput& CustomInput = MaterialExpressionCustom->Inputs.Emplace_GetRef();
-				CustomInput.InputName = "DUMMY_COLOR_INPUT";
-				CustomInput.Input.Connect(0, Color);
-			}
-
-			if (bNeedsWorldPositionExcludingShaderOffsets)
-			{
-				// Create a dummy world position node to ensure NEEDS_WORLD_POSITION_EXCLUDING_SHADER_OFFSETS is correct
-
-				UMaterialExpressionWorldPosition* WorldPosition = NewObject<UMaterialExpressionWorldPosition>(Library.Materials.Get());
-				WorldPosition->MaterialExpressionGuid = FGuid::NewGuid();
-				WorldPosition->bCollapsed = true;
-				WorldPosition->WorldPositionShaderOffset = WPT_ExcludeAllShaderOffsets;
-				WorldPosition->MaterialExpressionEditorX = MaterialExpressionCustom->MaterialExpressionEditorX - 200;
-				WorldPosition->MaterialExpressionEditorY = MaterialExpressionCustom->MaterialExpressionEditorY;
-				Library.Materials->FunctionExpressions.Add(WorldPosition);
-
-				FCustomInput& CustomInput = MaterialExpressionCustom->Inputs.Emplace_GetRef();
-				CustomInput.InputName = "DUMMY_WORLD_POSITION_INPUT";
-				CustomInput.Input.Connect(0, WorldPosition);
+				dep->EvaluateDependency(Library.Materials.Get(), MaterialExpressionCustom, Shader.Body);
 			}
 		}
 
@@ -377,4 +300,33 @@ IMaterialEditor* FHLSLShaderGenerator::FindMaterialEditorForAsset(UObject* InAss
 	}
 
 	return nullptr;
+}
+
+#include "MetaTags/HLSLDefaultParameterMetaTags.h"
+#define MetaTag(structType) MakeUnique<structType>()
+#define Dependency(structType) MakeUnique<structType>()
+
+void FHLSLShaderGenerator::Initialize()
+{
+	MetaTagStructMap.Empty();
+	// Generic tags for regular inputs
+	MetaTagStructMap.Add("group", MetaTag(FHLSLMetaTag_Groups));
+	MetaTagStructMap.Add("channels", MetaTag(FHLSLMetaTag_Channels));
+	MetaTagStructMap.Add("primitivedata", MetaTag(FHLSLMetaTag_PrimitiveData));
+	MetaTagStructMap.Add("range", MetaTag(FHLSLMetaTag_Range));
+	MetaTagStructMap.Add("samplertype", MetaTag(FHLSLMetaTag_SamplerType));
+
+	UniqueMetaTagStructMap.Empty();
+	// Special inputs w/ unique expressions
+	UniqueMetaTagStructMap.Add("particles", MetaTag(FHLSLUniqueMetaTag_Particles));
+	UniqueMetaTagStructMap.Add("parametercollection", MetaTag(FHLSLUniqueMetaTag_ParameterCollection));
+	UniqueMetaTagStructMap.Add("landscapevisibility", MetaTag(FHLSLUniqueMetaTag_LandscapeVisibility));
+
+	DependencyHandlers.Empty();
+	// For dependency handlers to get UE materials to compile
+	DependencyHandlers.Add(Dependency(FHLSLDependency_TexCoords));
+	DependencyHandlers.Add(Dependency(FHLSLDependency_SceneTexture));
+	DependencyHandlers.Add(Dependency(FHLSLDependency_VertexColors));
+	DependencyHandlers.Add(Dependency(FHLSLDependency_WPOExcludingOffsets));
+	DependencyHandlers.Add(Dependency(FHLSLDependency_SkyAtmosphere));
 }
