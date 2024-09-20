@@ -71,3 +71,7 @@ The generated material uses the same name as the HLSL Shader Library asset with 
 * When clicking `Create Material Instance` in the HLSL Shader Library editor, create the material instance with the same parameters as the preview instance in the editor
 * Further work to modularize the shader output semantics handling to allow for outputs that are not just material attributes (e.g landscape layers)
 * Support for different types of switches (e.g quality switches, shadow pass switches, etc...)
+* Specify default values for textures by giving it a path, e.g
+```hlsl
+Texture2D SomeTex = "/Game/Content/Textures/SomeTexture"
+```
